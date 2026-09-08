@@ -9,10 +9,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 
+from . import analyze as analyze_module
 from . import gait_logic
 from .db import get_session, init_db
 from .models import GaitSession, GaitStep
 from .schemas import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    PairAnalysis,
     RoundSummary,
     SessionCreate,
     SessionDetail,
@@ -162,6 +166,29 @@ async def log_step(
     out = _step_to_out(step)
     await manager.broadcast(session_id, {"type": "step", "data": out.model_dump(mode="json")})
     return out
+
+
+@app.post("/api/analyze", response_model=AnalyzeResponse)
+def analyze(body: AnalyzeRequest):
+    """
+    앞발(front_left/front_right)과 뒷발(rear_left/rear_right) 압력 매트릭스를 받아
+    ML+DTW 앙상블로 정상/비정상 점수를 계산해서 돌려준다.
+    (HMM 제외 및 특징 근사 등 현재 한계는 app/analyze.py 상단 주석 참고)
+    """
+    front = analyze_module.analyze_pair(body.front_left, body.front_right)
+    rear = analyze_module.analyze_pair(body.rear_left, body.rear_right)
+
+    overall_score = (front["ensemble_score"] + rear["ensemble_score"]) / 2.0
+    overall_symmetry = gait_logic.symmetry_from_score(overall_score)
+    verdict = "ABNORMAL" if overall_score > 0.5 else "NORMAL"
+
+    return AnalyzeResponse(
+        front=PairAnalysis(**front),
+        rear=PairAnalysis(**rear),
+        overall_score=overall_score,
+        overall_symmetry=overall_symmetry,
+        verdict=verdict,
+    )
 
 
 @app.websocket("/ws/sessions/{session_id}")

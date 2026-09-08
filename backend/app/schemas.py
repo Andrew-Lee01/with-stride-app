@@ -74,3 +74,41 @@ class SessionDetail(BaseModel):
     started_at: datetime
     steps: List[StepOut]
     rounds: List[RoundSummary]
+
+
+def _validate_16x10(v, name: str):
+    if len(v) != 16 or any(len(row) != 10 for row in v):
+        shape = (len(v), len(v[0]) if v else 0)
+        if shape == (10, 16):
+            raise ValueError(
+                f"{name}의 모양이 (10, 16)입니다 — 행/열이 뒤집힌 것 같습니다. 전치(transpose)해서 보내세요."
+            )
+        raise ValueError(f"{name}의 모양이 {shape}입니다. 16x10(16행 10열)이어야 합니다.")
+    return v
+
+
+class AnalyzeRequest(BaseModel):
+    front_left: Matrix16x10
+    front_right: Matrix16x10
+    rear_left: Matrix16x10
+    rear_right: Matrix16x10
+
+    @field_validator("front_left", "front_right", "rear_left", "rear_right")
+    @classmethod
+    def _shape(cls, v, info):
+        return _validate_16x10(v, info.field_name)
+
+
+class PairAnalysis(BaseModel):
+    ensemble_score: float
+    verdict: str
+    ml_score: float
+    dtw_score: float
+
+
+class AnalyzeResponse(BaseModel):
+    front: PairAnalysis
+    rear: PairAnalysis
+    overall_score: float
+    overall_symmetry: int
+    verdict: str

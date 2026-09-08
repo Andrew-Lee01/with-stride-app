@@ -10,6 +10,9 @@ h11==0.16.0
 httptools==0.8.0
 idna==3.19
 numpy==2.5.2
+scikit-learn==1.9.0
+joblib==1.5.3
+scipy==1.18.1
 pydantic==2.13.4
 pydantic_core==2.46.4
 python-dotenv==1.2.3
