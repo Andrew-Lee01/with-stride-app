@@ -88,14 +88,18 @@ def _validate_16x10(v, name: str):
 
 
 class AnalyzeRequest(BaseModel):
-    front_left: Matrix16x10
-    front_right: Matrix16x10
+    # 하드웨어 사정으로 뒷다리 2개(B.L/B.R)만 실제 센서가 있는 상태라 앞다리는 선택값으로
+    # 바꿈 — 없으면 서버가 뒷다리 점수만으로 판정한다. (2026-09-23, PCB 파손으로 임시 축소)
+    front_left: Optional[Matrix16x10] = None
+    front_right: Optional[Matrix16x10] = None
     rear_left: Matrix16x10
     rear_right: Matrix16x10
 
     @field_validator("front_left", "front_right", "rear_left", "rear_right")
     @classmethod
     def _shape(cls, v, info):
+        if v is None:
+            return v
         return _validate_16x10(v, info.field_name)
 
 
@@ -107,7 +111,7 @@ class PairAnalysis(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
-    front: PairAnalysis
+    front: Optional[PairAnalysis] = None
     rear: PairAnalysis
     overall_score: float
     overall_symmetry: int
