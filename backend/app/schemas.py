@@ -88,12 +88,13 @@ def _validate_16x10(v, name: str):
 
 
 class AnalyzeRequest(BaseModel):
-    # 하드웨어 사정으로 뒷다리 2개(B.L/B.R)만 실제 센서가 있는 상태라 앞다리는 선택값으로
-    # 바꿈 — 없으면 서버가 뒷다리 점수만으로 판정한다. (2026-09-23, PCB 파손으로 임시 축소)
+    # 하드웨어 사정으로 지금은 앞/뒤 중 한 축(2개)만 실제 센서가 있는 상태가 계속 바뀔 수
+    # 있어서, 앞/뒤 전부 선택값으로 둔다 — 한 축(앞 둘 다 또는 뒤 둘 다)만 보내도 되고,
+    # 둘 다 보내도 된다. 최소 한 축은 있어야 한다(둘 다 없으면 422).
     front_left: Optional[Matrix16x10] = None
     front_right: Optional[Matrix16x10] = None
-    rear_left: Matrix16x10
-    rear_right: Matrix16x10
+    rear_left: Optional[Matrix16x10] = None
+    rear_right: Optional[Matrix16x10] = None
 
     @field_validator("front_left", "front_right", "rear_left", "rear_right")
     @classmethod
@@ -101,6 +102,16 @@ class AnalyzeRequest(BaseModel):
         if v is None:
             return v
         return _validate_16x10(v, info.field_name)
+
+    @field_validator("rear_right")
+    @classmethod
+    def _at_least_one_axle(cls, v, info):
+        values = info.data
+        has_front = values.get("front_left") is not None and values.get("front_right") is not None
+        has_rear = values.get("rear_left") is not None and v is not None
+        if not has_front and not has_rear:
+            raise ValueError("front_left+front_right 또는 rear_left+rear_right 중 한 쌍은 반드시 있어야 합니다.")
+        return v
 
 
 class PairAnalysis(BaseModel):
@@ -112,7 +123,7 @@ class PairAnalysis(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     front: Optional[PairAnalysis] = None
-    rear: PairAnalysis
+    rear: Optional[PairAnalysis] = None
     overall_score: float
     overall_symmetry: int
     verdict: str

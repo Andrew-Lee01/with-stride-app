@@ -171,26 +171,30 @@ async def log_step(
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 def analyze(body: AnalyzeRequest):
     """
-    뒷발(rear_left/rear_right) 압력 매트릭스를 받아 ML+DTW 앙상블로 정상/비정상
-    점수를 계산해서 돌려준다. 앞발(front_left/front_right)은 하드웨어가 갖춰지면
-    다시 켤 수 있도록 선택값으로 남겨뒀고, 오면 같이 계산해서 함께 보여준다.
+    앞발(front_left/front_right)과 뒷발(rear_left/rear_right) 중 실제로 하드웨어가
+    있는 축만 보내면 된다 — 한 축만 와도, 둘 다 와도 계산한다 (하드웨어 사정으로
+    어느 쪽이 실제 센서인지 계속 바뀔 수 있어서 양쪽 다 선택값으로 둠).
     (HMM 제외 및 특징 근사 등 현재 한계는 app/analyze.py 상단 주석 참고)
     """
-    rear = analyze_module.analyze_pair(body.rear_left, body.rear_right)
-
     front = None
     if body.front_left is not None and body.front_right is not None:
         front = analyze_module.analyze_pair(body.front_left, body.front_right)
 
-    overall_score = (
-        (front["ensemble_score"] + rear["ensemble_score"]) / 2.0 if front else rear["ensemble_score"]
-    )
+    rear = None
+    if body.rear_left is not None and body.rear_right is not None:
+        rear = analyze_module.analyze_pair(body.rear_left, body.rear_right)
+
+    if front is None and rear is None:
+        raise HTTPException(status_code=422, detail="front 또는 rear 중 한 쌍은 반드시 있어야 합니다.")
+
+    scores = [p["ensemble_score"] for p in (front, rear) if p is not None]
+    overall_score = sum(scores) / len(scores)
     overall_symmetry = gait_logic.symmetry_from_score(overall_score)
     verdict = "ABNORMAL" if overall_score > 0.5 else "NORMAL"
 
     return AnalyzeResponse(
         front=PairAnalysis(**front) if front else None,
-        rear=PairAnalysis(**rear),
+        rear=PairAnalysis(**rear) if rear else None,
         overall_score=overall_score,
         overall_symmetry=overall_symmetry,
         verdict=verdict,
